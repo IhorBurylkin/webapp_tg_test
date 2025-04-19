@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Flask + ngrok Demo</title>
+</head>
+<body>
+  <h1>Фронтенд → Бэкенд через Flask API</h1>
+  <input id="name" type="text" placeholder="Ваше имя">
+  <button onclick="sendName()">Отправить</button>
+  <p id="response"></p>
+
+  <script>
+    async function sendName() {
+      const name = document.getElementById('name').value;
+      const res = await fetch('/api/hello', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      const data = await res.json();
+      document.getElementById('response').innerText = data.message;
+    }
+  </script>
+</body>
+</html>
