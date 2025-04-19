@@ -45,16 +45,59 @@ API_BASE_URL = os.getenv('API_BASE_URL', '')
 @app.route('/')
 def index():
     app.logger.info("Rendering index page, API_BASE_URL=%s", API_BASE_URL)
-    return render_template('index.html', api_base_url=API_BASE_URL)
+    fields = {
+        'title': 'Трекер расходов',
+        'date_label': 'Дата',
+        'date_error': 'Выберите дату',
+        'time_label': 'Время',
+        'time_error': 'Укажите время',
+        'store_label': 'Магазин',
+        'store_error': 'Укажите название магазина',
+        'product_label': 'Товары',
+        'product_placeholder': 'Введите список покупок',
+        'product_error': 'Укажите хотя бы один товар',
+        'total_label': 'Сумма',
+        'total_error': 'Укажите сумму',
+        'currency_label': 'Валюта',
+        'currency_select': 'Выберите валюту',
+        'currency_error': 'Выберите валюту'
+    }
+    
+    buttons = {
+        'submit': 'Отправить'
+    }
+    
+    return render_template('index.html', 
+                          fields=fields, 
+                          buttons=buttons, 
+                          api_base_url=API_BASE_URL)
 
-@app.route('/api/hello', methods=['POST'])
-def api_hello():
-    data = request.get_json(silent=True) or {}
-    name = data.get('name', 'World')
-    app.logger.info("Received hello request, name=%s", name)
-    resp = {'message': f'Hello, {name}!'}
-    app.logger.info("Responding: %s", resp)
-    return jsonify(resp), 200
+@app.route('/api/submit', methods=['GET'])
+def api_submit():
+    # Extract parameters from request
+    date = request.args.get('date')
+    time = request.args.get('time')
+    store = request.args.get('store')
+    product = request.args.get('product')
+    total = request.args.get('total')
+    currency = request.args.get('currency')
+    chat_id = request.args.get('chat_id')
+    
+    # Log received data
+    app.logger.info(
+        "Received expense submission - Date: %s, Time: %s, Store: %s, "
+        "Product: %s, Total: %s %s, Chat ID: %s",
+        date, time, store, product, total, currency, chat_id
+    )
+    
+    # Here you would typically process the data (save to DB, etc.)
+    # ...
+    
+    # Return success response
+    return jsonify({
+        'success': True,
+        'message': 'Данные успешно получены'
+    }), 200
 
 # ——————————————————————————————————————————————————————————————
 if __name__ == "__main__":
