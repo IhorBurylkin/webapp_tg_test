@@ -7,7 +7,7 @@
   <style>
     /* Общие сбросы */
     *, *::before, *::after { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: sans-serif; }
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: auto; font-family: sans-serif; }
     :root {
       --bg-color: #ffffff;
       --text-color: #000000;
@@ -137,75 +137,121 @@
     </form>
   </div>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script>
-    // Подстройка размера шрифта
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    // ——— Шаг 0. Лог в самом начале
+    console.log('DOM loaded, initializing WebApp…');
+
+    // Подстройка шрифта
     function adjustFont() {
       const base = Math.max(window.innerWidth, window.innerHeight) / 35;
       document.documentElement.style.fontSize = base + 'px';
     }
-    adjustFont(); window.addEventListener('resize', adjustFont);
+    adjustFont();
+    window.addEventListener('resize', adjustFont);
 
-    document.addEventListener('DOMContentLoaded', () => {
+    // ——— Шаг 1. Инициализация Telegram.WebApp
+    let tg = null;
     if (window.Telegram && Telegram.WebApp) {
-      const tg = Telegram.WebApp;
+      tg = Telegram.WebApp;
       tg.ready();
-        if (tg.requestFullscreen) tg.requestFullscreen(); else tg.expand();
-        const theme = tg.colorScheme || 'light';
-        document.body.setAttribute('data-theme', theme);
+      try {
+        if (typeof tg.requestFullscreen === 'function') {
+          tg.requestFullscreen();
+        } else {
+          throw new Error('Метод requestFullscreen не найден');
+        }
+      } catch (errFs) {
+        console.warn('Fullscreen unsupported, using expand():', errFs);
+        try {
+          tg.expand();
+        } catch (errEx) {
+          console.warn('Expand тоже не прошёл:', errEx);
+        }
+      }
+      const theme = tg.colorScheme || 'light';
+      document.body.setAttribute('data-theme', theme);
+    } else {
+      console.warn('Telegram.WebApp не доступен — идём без него');
+    }
+
+    // ——— Шаг 2. Готовим обработчик формы
+    console.log('Registering submit handler');
+    const form = document.getElementById('dataForm');
+    const fields = ['date','time','store','product','total','currency'];
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      console.log('Form submit triggered');
+
+      // Валидация
+      let valid = true;
+      fields.forEach(id => {
+        const el = document.getElementById(id);
+        const isValid = el.checkValidity();
+        console.log(`Field “${id}”: value="${el.value}", valid=${isValid}`, el.validity);
+        if (!isValid) {
+          valid = false;
+          // показываем сообщение об ошибке
+          el.nextElementSibling.style.display = 'block';
+        } else {
+          el.nextElementSibling.style.display = 'none';
+        }
+      });
+      if (!valid) {
+        console.warn('Validation failed — см. выше список невалидных полей');
+        return;
       }
 
-      const form = document.getElementById('dataForm');
-  const fields = ['date','time','store','product','total','currency'];
-  
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
-    
-    // Валидация формы
-    let valid = true;
-    fields.forEach(id => { 
-      const element = document.getElementById(id);
-      if (!element.checkValidity()) {
-        valid = false;
-        element.nextElementSibling.style.display = 'block';
-      } else {
-        element.nextElementSibling.style.display = 'none';
+      // Сбор данных
+      const data = {};
+      fields.forEach(id => data[id] = document.getElementById(id).value);
+
+      // Получаем chat_id
+      let chatId = '';
+      try {
+        chatId = (tg && tg.initDataUnsafe?.user?.id) || '';
+      } catch(_) { /* ignore */ }
+      if (!chatId) {
+        const parts = window.location.pathname.split('/');
+        chatId = parts[parts.length - 1] || '';
+      }
+      data.chat_id = chatId;
+      console.log('Payload:', data);
+
+      // ——— Шаг 3. Отправка
+      try {
+        console.log('About to fetch /api/submit');
+        const res = await fetch('/api/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        console.log('Fetch resolved with status', res.status);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || res.statusText);
+        }
+        console.log('Submitted successfully');
+      } catch (errReq) {
+        console.error('Submit error:', errReq);
+      } finally {
+        if (tg && typeof tg.close === 'function') {
+          try {
+            tg.close();
+            console.log('Telegram.WebApp.close() called');
+          } catch(errClose) {
+            console.warn('Error closing WebApp:', errClose);
+          }
+        }
       }
     });
-    
-    if (!valid) return;
 
-    // Подготовка данных
-    const data = {};
-    fields.forEach(id => data[id] = document.getElementById(id).value);
-    
-    // Получение chat_id из URL
-    const pathParts = window.location.pathname.split('/');
-    const chatId = pathParts[pathParts.length - 1];
-    data.chat_id = chatId;
-    
-    try {
-      // Отправка через Worker API
-      const API_URL = "https://aiassistantontelegrambot.uk";
-      
-      const response = await fetch(`${API_URL}/api/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      
-      if (!response.ok) {
-        const result = await response.json();
-        throw new Error(result.message || 'Server error');
-      }
-    } catch (err) {
-      console.error('Error:', err);
-    } finally {
-      if (window.Telegram && Telegram.WebApp) {
-        Telegram.WebApp.close();
-      }
-    }
-  });
+  } catch (errInit) {
+    console.error('Initialization error:', errInit);
+  }
 });
-  </script>
+</script>
 </body>
 </html>
